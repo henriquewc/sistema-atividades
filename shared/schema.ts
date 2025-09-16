@@ -51,12 +51,8 @@ export const insertClientSchema = createInsertSchema(clients).omit({
   createdAt: true,
 }).extend({
   documento: z.string()
-    .min(11, "Documento deve ter pelo menos 11 dígitos (CPF)")
-    .max(18, "Documento inválido")
-    .refine((doc) => validateDocument(doc), {
-      message: "CPF ou CNPJ inválido"
-    })
-    .transform((doc) => doc.replace(/\D/g, '')), // Normalize to digits only for storage
+    .min(1, "Documento é obrigatório")
+    .max(50, "Documento muito longo"),
 });
 
 export const insertActivitySchema = createInsertSchema(activities).omit({
@@ -208,4 +204,208 @@ export function sanitizeClient(client: Client): PublicClient {
     ...publicData,
     documento: maskDocumentDigits(client.documento)
   };
+}
+
+// === SISTEMA DE PROPOSTAS ===
+
+// Potências do Sistema Fotovoltaico
+export const potencias = pgTable("potencias", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  potencia: text("potencia").notNull(), // Ex: "5.94 kWp"
+  materialAC: integer("material_ac").notNull(), // Preço do material AC em centavos
+  descricaoEquipamentos: text("descricao_equipimentos").notNull(),
+  precoCeramica: integer("preco_ceramica").notNull(), // Preço em centavos
+  precoFibrocimento: integer("preco_fibrocimento").notNull(),
+  precoLaje: integer("preco_laje").notNull(),
+  precoSolo: integer("preco_solo").notNull(),
+  precoMetalico: integer("preco_metalico").notNull(),
+  estimativaGeracao: integer("estimativa_geracao").notNull(), // kWh/mês
+  valorEconomia: integer("valor_economia").notNull(), // R$/mês em centavos
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Cidades para Instalação
+export const cidades = pgTable("cidades", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nome: text("nome").notNull().unique(),
+  custoExtraDia: integer("custo_extra_dia").notNull(), // Custo extra por dia em centavos
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Margens de Venda
+export const margens = pgTable("margens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  descricao: text("descricao").notNull(),
+  percentual: integer("percentual").notNull(), // Percentual * 100 (ex: 1500 = 15%)
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Condições de Pagamento
+export const condicoesPagamento = pgTable("condicoes_pagamento", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  condicao: text("condicao").notNull(),
+  ativo: boolean("ativo").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Propostas Comerciais
+export const propostas = pgTable("propostas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Dados do Cliente
+  nomeCliente: text("nome_cliente").notNull(),
+  emailCliente: text("email_cliente").notNull(),
+  telefoneCliente: text("telefone_cliente").notNull(),
+  titularCliente: text("titular_cliente").notNull(),
+  numeroContrato: text("numero_contrato").notNull(),
+  enderecoCliente: text("endereco_cliente"),
+  
+  // Sistema Fotovoltaico
+  potenciaId: varchar("potencia_id").references(() => potencias.id).notNull(),
+  tipoTelhado: text("tipo_telhado").notNull(), // "ceramica" | "fibrocimento" | "laje" | "solo" | "metalico"
+  diasInstalacao: integer("dias_instalacao").notNull(),
+  
+  // Local e Custos
+  cidadeId: varchar("cidade_id").references(() => cidades.id).notNull(),
+  margemId: varchar("margem_id").references(() => margens.id).notNull(),
+  condicaoPagamentoId: varchar("condicao_pagamento_id").references(() => condicoesPagamento.id).notNull(),
+  
+  // Valores Calculados (em centavos)
+  valorSistema: integer("valor_sistema").notNull(),
+  materialAC: integer("material_ac").notNull(),
+  maoObra: integer("mao_obra").notNull(),
+  deslocamento: integer("deslocamento").notNull(),
+  valorProjeto: integer("valor_projeto").notNull(),
+  subtotal: integer("subtotal").notNull(),
+  valorMargem: integer("valor_margem").notNull(),
+  totalSemImposto: integer("total_sem_imposto").notNull(),
+  valorImposto: integer("valor_imposto").notNull(),
+  totalFinal: integer("total_final").notNull(),
+  
+  // Customizações
+  valorFinalPersonalizado: integer("valor_final_personalizado"),
+  margemRealObtida: integer("margem_real_obtida"), // Percentual * 100
+  valorPorWp: integer("valor_por_wp"), // Valor por Wp em centavos
+  
+  // Vistoria (opcional)
+  dataVistoria: timestamp("data_vistoria"),
+  observacoesTecnicas: text("observacoes_tecnicas"),
+  
+  // Controle
+  status: text("status").default("rascunho").notNull(), // "rascunho" | "enviada" | "aprovada" | "rejeitada"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Configurações Gerais do Sistema
+export const configuracoes = pgTable("configuracoes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chave: text("chave").notNull().unique(),
+  valor: text("valor").notNull(),
+  descricao: text("descricao"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// === SCHEMAS DE INSERÇÃO PARA PROPOSTAS ===
+
+export const insertPotenciaSchema = createInsertSchema(potencias).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  potencia: z.string().min(1, "Potência é obrigatória"),
+  materialAC: z.number().min(0, "Valor deve ser positivo"),
+  precoCeramica: z.number().min(0, "Valor deve ser positivo"),
+  precoFibrocimento: z.number().min(0, "Valor deve ser positivo"),
+  precoLaje: z.number().min(0, "Valor deve ser positivo"),
+  precoSolo: z.number().min(0, "Valor deve ser positivo"),
+  precoMetalico: z.number().min(0, "Valor deve ser positivo"),
+  estimativaGeracao: z.number().min(0, "Valor deve ser positivo"),
+  valorEconomia: z.number().min(0, "Valor deve ser positivo"),
+});
+
+export const insertCidadeSchema = createInsertSchema(cidades).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  nome: z.string().min(1, "Nome da cidade é obrigatório"),
+  custoExtraDia: z.number().min(0, "Valor deve ser positivo"),
+});
+
+export const insertMargemSchema = createInsertSchema(margens).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  descricao: z.string().min(1, "Descrição é obrigatória"),
+  percentual: z.number().min(0, "Percentual deve ser positivo"),
+});
+
+export const insertCondicaoPagamentoSchema = createInsertSchema(condicoesPagamento).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  condicao: z.string().min(1, "Condição de pagamento é obrigatória"),
+});
+
+export const insertPropostaSchema = createInsertSchema(propostas).omit({
+  id: true,
+  createdAt: true,
+  status: true,
+}).extend({
+  nomeCliente: z.string().min(1, "Nome do cliente é obrigatório"),
+  emailCliente: z.string().email("Email inválido"),
+  telefoneCliente: z.string().min(1, "Telefone é obrigatório"),
+  titularCliente: z.string().min(1, "Titular é obrigatório"),
+  numeroContrato: z.string().min(1, "Número do contrato é obrigatório"),
+  diasInstalacao: z.number().min(1, "Dias de instalação deve ser positivo"),
+  tipoTelhado: z.enum(["ceramica", "fibrocimento", "laje", "solo", "metalico"]),
+});
+
+export const insertConfiguracaoSchema = createInsertSchema(configuracoes).omit({
+  id: true,
+  updatedAt: true,
+}).extend({
+  chave: z.string().min(1, "Chave é obrigatória"),
+  valor: z.string().min(1, "Valor é obrigatório"),
+});
+
+// === TIPOS PARA PROPOSTAS ===
+export type Potencia = typeof potencias.$inferSelect;
+export type InsertPotencia = z.infer<typeof insertPotenciaSchema>;
+export type Cidade = typeof cidades.$inferSelect;
+export type InsertCidade = z.infer<typeof insertCidadeSchema>;
+export type Margem = typeof margens.$inferSelect;
+export type InsertMargem = z.infer<typeof insertMargemSchema>;
+export type CondicaoPagamento = typeof condicoesPagamento.$inferSelect;
+export type InsertCondicaoPagamento = z.infer<typeof insertCondicaoPagamentoSchema>;
+export type Proposta = typeof propostas.$inferSelect;
+export type InsertProposta = z.infer<typeof insertPropostaSchema>;
+export type Configuracao = typeof configuracoes.$inferSelect;
+export type InsertConfiguracao = z.infer<typeof insertConfiguracaoSchema>;
+
+// === ENUMS E OPÇÕES ===
+export const tipoTelhadoOptions = ["ceramica", "fibrocimento", "laje", "solo", "metalico"] as const;
+export const statusPropostaOptions = ["rascunho", "enviada", "aprovada", "rejeitada"] as const;
+
+// === UTILITIES PARA PROPOSTAS ===
+export function formatCurrency(centavos: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(centavos / 100);
+}
+
+export function parseCurrency(valor: string): number {
+  // Remove R$, espaços, pontos e converte vírgula para ponto
+  const numeroLimpo = valor.replace(/[R$\s.]/g, '').replace(',', '.');
+  return Math.round(parseFloat(numeroLimpo) * 100); // Converte para centavos
+}
+
+export function formatPercentual(centesimos: number): string {
+  return `${(centesimos / 100).toFixed(2)}%`;
+}
+
+export function calcularValorPorWp(totalFinal: number, potenciaKwp: number): number {
+  const potenciaWp = potenciaKwp * 1000; // Converte kWp para Wp
+  return Math.round(totalFinal / potenciaWp); // Valor por Wp em centavos
 }

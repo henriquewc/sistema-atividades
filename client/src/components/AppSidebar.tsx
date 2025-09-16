@@ -1,4 +1,4 @@
-import { Home, Activity, Users, FileText, Settings } from "lucide-react";
+import { Home, Activity, Users, FileText, Calculator } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -28,14 +28,14 @@ const menuItems = [
     icon: Users,
   },
   {
+    title: "Propostas",
+    url: "/propostas",
+    icon: Calculator,
+  },
+  {
     title: "Relatórios",
     url: "/relatorios",
     icon: FileText,
-  },
-  {
-    title: "Configurações",
-    url: "/configuracoes",
-    icon: Settings,
   },
 ];
 

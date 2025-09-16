@@ -7,16 +7,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Edit, Eye, History } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Client } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function ClientsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<{id: string, name: string} | null>(null);
+  const { toast } = useToast();
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
+  });
+
+  const createClientMutation = useMutation({
+    mutationFn: (clientData: any) => apiRequest('/api/clients', { method: 'POST', data: clientData }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+      toast({
+        title: "Cliente criado com sucesso",
+        description: "O novo cliente foi adicionado ao sistema.",
+      });
+      setIsDialogOpen(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao criar cliente",
+        description: "Ocorreu um erro ao tentar criar o cliente. Tente novamente.",
+        variant: "destructive",
+      });
+      console.error('Erro ao criar cliente:', error);
+    },
   });
 
   if (isLoading) {
@@ -52,8 +75,7 @@ export default function ClientsPage() {
             </DialogHeader>
             <ClientForm 
               onSubmit={(data) => {
-                console.log('Cliente criado:', data);
-                setIsDialogOpen(false);
+                createClientMutation.mutate(data);
               }}
             />
           </DialogContent>

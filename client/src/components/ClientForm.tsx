@@ -9,16 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Save, UserPlus } from "lucide-react";
 import { z } from "zod";
-import { validateDocument } from "@shared/schema";
-
 const clientFormSchema = z.object({
   nomeCompleto: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   documento: z.string()
-    .min(11, "Documento deve ter pelo menos 11 dígitos (CPF)")
-    .max(18, "Documento inválido")
-    .refine((doc) => validateDocument(doc), {
-      message: "CPF ou CNPJ inválido"
-    }),
+    .min(1, "Documento é obrigatório")
+    .max(50, "Documento muito longo"),
   endereco: z.string().min(5, "Endereço é obrigatório"),
   celular: z.string().min(10, "Celular deve ter pelo menos 10 dígitos"),
   numeroContrato: z.string().min(1, "Número do contrato é obrigatório"),

@@ -13,6 +13,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import ActivitiesPage from "@/pages/ActivitiesPage";
 import ClientsPage from "@/pages/ClientsPage";
 import ReportsPage from "@/pages/ReportsPage";
+import PropostasPage from "@/pages/PropostasPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/" component={DashboardPage} />
       <Route path="/atividades" component={ActivitiesPage} />
       <Route path="/clientes" component={ClientsPage} />
+      <Route path="/propostas" component={PropostasPage} />
       <Route path="/relatorios" component={ReportsPage} />
       <Route component={NotFound} />
     </Switch>
